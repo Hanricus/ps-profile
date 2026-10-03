@@ -58,6 +58,8 @@ $global:Msg = @{
         LangCurrent      = "Current language: {0}"
         LangUsage        = "Usage: lang en | lang my"
         LangSet          = "Language set to {0}"
+        UpdateAvail      = "UPDATE AVAILABLE: v{0} -> v{1}"
+        UpdateHow        = "Type 'psupdate' to update (your routes and settings are kept)."
     }
     MY = @{
         Searching        = "Mencari network drive yang ada..."
@@ -100,6 +102,8 @@ $global:Msg = @{
         LangCurrent      = "Bahasa semasa: {0}"
         LangUsage        = "Guna: lang en | lang my"
         LangSet          = "Bahasa ditukar ke {0}"
+        UpdateAvail      = "ADA KEMASKINI: v{0} -> v{1}"
+        UpdateHow        = "Type 'psupdate' untuk update (route dan setting kau kekal)."
     }
 }
 
@@ -124,6 +128,47 @@ function lang {
     $global:PSLang = $code
     @{ Lang = $code } | ConvertTo-Json | Set-Content $global:configFile
     Write-Host (Tr 'LangSet' $code) -ForegroundColor Green
+}
+
+# ===== VERSION + UPDATE CHECK =====
+# VERSION file sits next to this profile (in the repo / PSRoutes\app). Data (routes, config) lives in PSRoutes\ and is never touched by updates.
+$global:PSRoutesRepo    = "Hanricus/ps-profile"
+$global:PSRoutesVersion = "0.0.0"
+if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "VERSION"))) {
+    try { $global:PSRoutesVersion = (Get-Content (Join-Path $PSScriptRoot "VERSION") -Raw).Trim() } catch { }
+}
+
+function Test-PSRoutesUpdate {
+    $cacheFile = Join-Path $global:PSDataDir "update-check.json"
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $latest = $null
+
+    # use cached result for 12 hours so "list" stays fast
+    if (Test-Path $cacheFile) {
+        try {
+            $c = Get-Content $cacheFile -Raw | ConvertFrom-Json
+            if (($now - [long]$c.Checked) -lt 43200) { $latest = $c.Latest }
+        } catch { }
+    }
+    if (-not $latest) {
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            $latest = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/VERSION" -TimeoutSec 3 -UseBasicParsing).ToString().Trim()
+            @{ Checked = $now; Latest = $latest } | ConvertTo-Json | Set-Content $cacheFile
+        } catch { return }   # offline / repo private / no VERSION -> stay silent
+    }
+    try {
+        if ([version]$latest -gt [version]$global:PSRoutesVersion) {
+            Write-Host (Tr 'UpdateAvail' $global:PSRoutesVersion $latest) -ForegroundColor Yellow
+            Write-Host (Tr 'UpdateHow') -ForegroundColor DarkGray
+            Write-Host ""
+        }
+    } catch { }
+}
+
+# Re-runs the installer, which detects the existing install and updates it
+function psupdate {
+    Invoke-RestMethod "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/install.ps1" | Invoke-Expression
 }
 
 # backup script: look in PSRoutes first, then D:\
@@ -463,6 +508,7 @@ function list {
     Write-Host " | |_) | | | | | | | | | |  _| \___ \ " -ForegroundColor Green
     Write-Host " |  _ <| |_| | |_| | | | | |___ ___) |" -ForegroundColor Green
     Write-Host " |_| \_\\___/ \___/  |_| |_____|____/ " -ForegroundColor Green
+    Write-Host "  PSRoutes v$($global:PSRoutesVersion)" -ForegroundColor DarkGray
     Write-Host ""
     if ($global:LegacyRouteInfo) {
         Write-Host (Tr 'HdrLocal') -ForegroundColor Cyan
@@ -493,6 +539,7 @@ function list {
     Write-Host "  newpath" -ForegroundColor Yellow -NoNewline
     Write-Host " $(Tr 'AddRoute')" -ForegroundColor DarkGray
     Write-Host ""
+    Test-PSRoutesUpdate
 }
 
 # Load private extras (not in git): %USERPROFILE%\PSRoutes\local.ps1

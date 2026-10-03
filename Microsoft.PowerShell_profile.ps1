@@ -1,24 +1,145 @@
 # PSRoutes by Shakir (Hanricus) - https://github.com/Hanricus/ps-profile
 # Made just for fun. Use it, change it, make it your own. MIT License.
 
-# ===== MACHINE CONFIG (auto-detect, tak payah edit) =====
+# ===== MACHINE CONFIG (auto-detect, no need to edit) =====
 $global:PSDataDir = Join-Path $env:USERPROFILE "PSRoutes"
 if (-not (Test-Path $global:PSDataDir)) { New-Item -ItemType Directory -Path $global:PSDataDir -Force | Out-Null }
 
-# backup script: cari dalam PSRoutes dulu, lepas tu D:\
+# ===== LANGUAGE (EN / MY) =====
+# Default is EN. Type "lang my" or "lang en" to switch; the choice is saved in PSRoutes\config.json
+$global:configFile = Join-Path $global:PSDataDir "config.json"
+$global:PSLang = "EN"
+if (Test-Path $global:configFile) {
+    try {
+        $cfg = Get-Content $global:configFile -Raw | ConvertFrom-Json
+        if ($cfg.Lang -in @("EN", "MY")) { $global:PSLang = $cfg.Lang }
+    } catch { }
+}
+
+$global:Msg = @{
+    EN = @{
+        Searching        = "Searching for available network drive..."
+        AlreadyIn        = "Already in {0} directory: {1}"
+        FoundDrive       = "Found existing mapped drive: {0}"
+        CheckingConn     = "Checking connection to {0}..."
+        NotReachable     = "{0} not reachable."
+        Mapping          = "Attempting to map temporary drive for {0}..."
+        DriveMapped      = "{0} drive already mapped, checking if valid..."
+        DriveValid       = "{0} drive is valid and accessible"
+        DriveRemap       = "{0} drive exists but path not found, trying to remap..."
+        MapOk            = "Successfully mapped {0} to {1}"
+        PathNotFound     = "Path {0} not found."
+        MapError         = "Error mapping {0} : {1}"
+        NoDrive          = "ERROR: No valid network drive found. Check connection or server access."
+        Navigated        = "SUCCESS: Navigated to {0}"
+        NotFound         = "ERROR: {0} not found."
+        Opening          = "Opening {0}..."
+        Migrating        = "Migrating old route '{0}'..."
+        MigrateFail      = "WARNING: Route '{0}' cannot be migrated (invalid path format), skipped."
+        MigrateDone      = "SUCCESS: All old routes were auto-migrated to the new format."
+        PastePath        = "Paste route path (example: \\server01\share\myapp)"
+        PathWarn         = "WARNING: This path was not found / cannot be accessed from here."
+        ConfirmSave      = "Save it anyway? (Y/N)"
+        Cancelled        = "Cancelled."
+        AliasLocalPrompt = "What alias do you want for this file/folder? (example: watermark)"
+        AliasLocalOk     = "SUCCESS: Alias '{0}' -> {1} (local)"
+        TypeToRun        = "Type '{0}' to run/open it."
+        BadFormat        = "ERROR: Invalid path format. Must be \\server\share\..."
+        AliasRoutePrompt = "What alias do you want for this route? (example: myapp)"
+        AliasExists      = "WARNING: Alias '{0}' already exists, overwriting the old path."
+        AliasRouteOk     = "SUCCESS: Alias '{0}' -> {1} (drive {2})"
+        TypeToEnter      = "You can now type '{0}' anytime to enter this folder."
+        RunningScan      = "Running ScanMuka..."
+        FileNotFound     = "ERROR: File not found at {0}"
+        HdrLocal         = "=== ROUTES (LOCAL - from local.ps1) ==="
+        HdrNew           = "=== ROUTES (NEW - from newpath) ==="
+        NoneYet          = "(none yet)"
+        AddRoute         = "-> add a new route"
+        LangCurrent      = "Current language: {0}"
+        LangUsage        = "Usage: lang en | lang my"
+        LangSet          = "Language set to {0}"
+    }
+    MY = @{
+        Searching        = "Mencari network drive yang ada..."
+        AlreadyIn        = "Dah berada dalam folder {0}: {1}"
+        FoundDrive       = "Jumpa drive yang dah di-map: {0}"
+        CheckingConn     = "Menyemak sambungan ke {0}..."
+        NotReachable     = "{0} tak dapat dicapai."
+        Mapping          = "Cuba map drive sementara untuk {0}..."
+        DriveMapped      = "Drive {0} dah di-map, semak sama ada sah..."
+        DriveValid       = "Drive {0} sah dan boleh diakses"
+        DriveRemap       = "Drive {0} wujud tapi path tak jumpa, cuba map semula..."
+        MapOk            = "Berjaya map {0} ke {1}"
+        PathNotFound     = "Path {0} tak jumpa."
+        MapError         = "Ralat semasa map {0} : {1}"
+        NoDrive          = "ERROR: Tiada network drive yang sah. Semak sambungan atau akses server."
+        Navigated        = "SUCCESS: Dah masuk ke {0}"
+        NotFound         = "ERROR: {0} tak jumpa."
+        Opening          = "Membuka {0}..."
+        Migrating        = "Migrate route lama '{0}'..."
+        MigrateFail      = "WARNING: Route '{0}' tak boleh migrate (format path tak valid), skip."
+        MigrateDone      = "SUCCESS: Semua route lama dah auto-migrate ke format baru."
+        PastePath        = "Paste path route (contoh: \\server01\share\myapp)"
+        PathWarn         = "WARNING: Path ni tak jumpa / tak boleh access dari sini."
+        ConfirmSave      = "Confirm nak simpan jugak? (Y/N)"
+        Cancelled        = "Dibatalkan."
+        AliasLocalPrompt = "Nak letak alias apa untuk file/folder ni? (contoh: watermark)"
+        AliasLocalOk     = "SUCCESS: Alias '{0}' -> {1} (local)"
+        TypeToRun        = "Type '{0}' untuk run/buka."
+        BadFormat        = "ERROR: Format path tak valid. Kena format \\server\share\..."
+        AliasRoutePrompt = "Nak letak alias apa untuk route ni? (contoh: myapp)"
+        AliasExists      = "WARNING: Alias '{0}' dah wujud, overwrite path lama."
+        AliasRouteOk     = "SUCCESS: Alias '{0}' -> {1} (drive {2})"
+        TypeToEnter      = "Boleh terus type '{0}' untuk masuk folder ni bila-bila masa."
+        RunningScan      = "Menjalankan ScanMuka..."
+        FileNotFound     = "ERROR: File tak jumpa kat {0}"
+        HdrLocal         = "=== ROUTES (LOCAL - dari local.ps1) ==="
+        HdrNew           = "=== ROUTES (BARU - dari newpath) ==="
+        NoneYet          = "(takde lagi)"
+        AddRoute         = "-> tambah route baru"
+        LangCurrent      = "Bahasa semasa: {0}"
+        LangUsage        = "Guna: lang en | lang my"
+        LangSet          = "Bahasa ditukar ke {0}"
+    }
+}
+
+# Tr = translate. Usage: Tr 'Navigated' $path   (falls back to EN, then to the key itself)
+function Tr {
+    param([string]$key)
+    $fmt = $global:Msg[$global:PSLang][$key]
+    if (-not $fmt) { $fmt = $global:Msg["EN"][$key] }
+    if (-not $fmt) { return $key }
+    if ($args.Count -gt 0) { return ($fmt -f $args) }
+    return $fmt
+}
+
+function lang {
+    param([string]$code = "")
+    $code = $code.ToUpper()
+    if ($code -notin @("EN", "MY")) {
+        Write-Host (Tr 'LangCurrent' $global:PSLang) -ForegroundColor Cyan
+        Write-Host (Tr 'LangUsage') -ForegroundColor DarkGray
+        return
+    }
+    $global:PSLang = $code
+    @{ Lang = $code } | ConvertTo-Json | Set-Content $global:configFile
+    Write-Host (Tr 'LangSet' $code) -ForegroundColor Green
+}
+
+# backup script: look in PSRoutes first, then D:\
 $global:BackupScript = @((Join-Path $global:PSDataDir "backup.ps1"), "D:\backup.ps1") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $global:BackupScript) { $global:BackupScript = Join-Path $global:PSDataDir "backup.ps1" }
 
-# PHP: cari folder C:\php* paling baru yang ada php.exe, kalau jumpa letak depan PATH
+# PHP: find the newest C:\php* folder containing php.exe and put it first in PATH
 $phpDir = Get-ChildItem "C:\" -Directory -Filter "php*" -ErrorAction SilentlyContinue |
     Where-Object { Test-Path (Join-Path $_.FullName "php.exe") } |
     Sort-Object Name -Descending | Select-Object -First 1
 if ($phpDir) { $env:Path = "$($phpDir.FullName);" + $env:Path }
 
 # ============================================
-# DYNAMIC ROUTE SYSTEM - alias untuk network path
-# Tambah route baru: type "newpath"
-# Tengok semua route: type "list"
+# DYNAMIC ROUTE SYSTEM - aliases for network paths / local files
+# Add a new route: type "newpath"
+# See all routes:  type "list"
 # ============================================
 $global:routesFile = Join-Path $global:PSDataDir "ps-routes.json"
 if (-not (Test-Path $global:routesFile) -and (Test-Path "D:\ps-routes.json")) { Copy-Item "D:\ps-routes.json" $global:routesFile }
@@ -27,9 +148,9 @@ $global:availableLetters = @("V","W","X","Y","Z","U","T","S","R","Q")
 function Invoke-RouteConnect {
     param(
         [string]$aliasName,
-        [string]$server,       # contoh: \\server01\share
-        [string]$targetSubPath, # contoh: myapp  (boleh kosong "")
-        [string]$driveLetter    # contoh: "V:"
+        [string]$server,       # example: \\server01\share
+        [string]$targetSubPath, # example: myapp  (can be empty "")
+        [string]$driveLetter    # example: "V:"
     )
 
     $localBackupScript = $global:BackupScript
@@ -37,7 +158,7 @@ function Invoke-RouteConnect {
     $targetPath = $null
 
     Write-Host ""
-    Write-Host "Searching for available network drive..." -ForegroundColor Cyan
+    Write-Host (Tr 'Searching') -ForegroundColor Cyan
 
     # 1. Check if already in target directory
     $currentLocation = Get-Location
@@ -46,7 +167,7 @@ function Invoke-RouteConnect {
         if ($currentLocation.Path -match "^([A-Z]:)") {
             $foundDrive = $matches[1]
             $targetPath = $currentLocation.Path
-            Write-Host "Already in $aliasName directory: $targetPath" -ForegroundColor Green
+            Write-Host (Tr 'AlreadyIn' $aliasName $targetPath) -ForegroundColor Green
         }
     }
 
@@ -58,7 +179,7 @@ function Invoke-RouteConnect {
             if (Test-Path $testPath) {
                 $foundDrive = "$($drive.Name):"
                 $targetPath = $testPath
-                Write-Host "Found existing mapped drive: $foundDrive" -ForegroundColor Green
+                Write-Host (Tr 'FoundDrive' $foundDrive) -ForegroundColor Green
                 break
             }
         }
@@ -67,25 +188,25 @@ function Invoke-RouteConnect {
     # 3. If still not found, map fresh using assigned drive letter
     if (-not $foundDrive) {
         $hostName = ($server -replace "\\\\", "") -split "\\" | Select-Object -First 1
-        Write-Host "Checking connection to $hostName..." -ForegroundColor Yellow
+        Write-Host (Tr 'CheckingConn' $hostName) -ForegroundColor Yellow
 
         if (-not (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
-            Write-Host "$hostName not reachable." -ForegroundColor Red
+            Write-Host (Tr 'NotReachable' $hostName) -ForegroundColor Red
         } else {
-            Write-Host "Attempting to map temporary drive for $server..." -ForegroundColor Yellow
+            Write-Host (Tr 'Mapping' $server) -ForegroundColor Yellow
             $tempLetter = $driveLetter
 
             try {
                 $existingDrive = Get-PSDrive -Name ($tempLetter.TrimEnd(":")) -ErrorAction SilentlyContinue
                 if ($existingDrive) {
-                    Write-Host "$tempLetter drive already mapped, checking if valid..." -ForegroundColor Yellow
+                    Write-Host (Tr 'DriveMapped' $tempLetter) -ForegroundColor Yellow
                     $testPath = if ($targetSubPath -ne "") { Join-Path $tempLetter $targetSubPath } else { "$tempLetter\" }
                     if (Test-Path $testPath) {
                         $foundDrive = $tempLetter
                         $targetPath = $testPath
-                        Write-Host "$tempLetter drive is valid and accessible" -ForegroundColor Green
+                        Write-Host (Tr 'DriveValid' $tempLetter) -ForegroundColor Green
                     } else {
-                        Write-Host "$tempLetter drive exists but path not found, trying to remap..." -ForegroundColor Yellow
+                        Write-Host (Tr 'DriveRemap' $tempLetter) -ForegroundColor Yellow
                         Start-Process "net" -ArgumentList "use", $tempLetter, "/delete", "/yes" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
                         Start-Sleep -Milliseconds 500
                     }
@@ -102,21 +223,21 @@ function Invoke-RouteConnect {
                     if (Test-Path $testPath) {
                         $foundDrive = $tempLetter
                         $targetPath = $testPath
-                        Write-Host "Successfully mapped $tempLetter to $server" -ForegroundColor Green
+                        Write-Host (Tr 'MapOk' $tempLetter $server) -ForegroundColor Green
                     } else {
-                        Write-Host "Path $testPath not found." -ForegroundColor Yellow
+                        Write-Host (Tr 'PathNotFound' $testPath) -ForegroundColor Yellow
                         Start-Process "net" -ArgumentList "use", $tempLetter, "/delete", "/yes" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
                     }
                 }
             } catch {
-                Write-Host "Error mapping $server : $_" -ForegroundColor Red
+                Write-Host (Tr 'MapError' $server $_) -ForegroundColor Red
             }
         }
     }
 
     if (-not $foundDrive -or -not $targetPath) {
         Write-Host ""
-        Write-Host "ERROR: No valid network drive found. Check connection or server access." -ForegroundColor Red
+        Write-Host (Tr 'NoDrive') -ForegroundColor Red
         Write-Host ""
         return
     }
@@ -124,7 +245,7 @@ function Invoke-RouteConnect {
     if ($currentLocation.Path -ne $targetPath) {
         Set-Location $targetPath
         Write-Host ""
-        Write-Host "SUCCESS: Navigated to $targetPath" -ForegroundColor Green
+        Write-Host (Tr 'Navigated' $targetPath) -ForegroundColor Green
         Write-Host ""
     } else {
         Write-Host ""
@@ -134,16 +255,16 @@ function Invoke-RouteConnect {
 function Invoke-LocalRoute {
     param([string]$aliasName, [string]$path)
     if (-not (Test-Path -LiteralPath $path)) {
-        Write-Host "ERROR: $path tak jumpa." -ForegroundColor Red
+        Write-Host (Tr 'NotFound' $path) -ForegroundColor Red
         return
     }
     if (Test-Path -LiteralPath $path -PathType Container) {
         Set-Location -LiteralPath $path
-        Write-Host "SUCCESS: Navigated to $path" -ForegroundColor Green
+        Write-Host (Tr 'Navigated' $path) -ForegroundColor Green
     } elseif ([IO.Path]::GetExtension($path) -eq ".ps1") {
         & $path
     } else {
-        Write-Host "Opening $aliasName..." -ForegroundColor Cyan
+        Write-Host (Tr 'Opening' $aliasName) -ForegroundColor Cyan
         if ([IO.Path]::GetExtension($path) -in ".bat", ".cmd") {
             cmd /c "`"$path`""
         } else {
@@ -210,7 +331,7 @@ function Load-Routes {
 
             if ($routeData -is [string]) {
                 # OLD FORMAT detected (plain path string) -> auto-migrate
-                Write-Host "Migrating old route '$aliasName'..." -ForegroundColor DarkYellow
+                Write-Host (Tr 'Migrating' $aliasName) -ForegroundColor DarkYellow
                 $split = Split-RoutePath -fullPath $routeData
                 if ($split) {
                     $driveLetter = Get-NextFreeLetter -usedLetters $usedLetters
@@ -224,11 +345,11 @@ function Load-Routes {
                     Register-RouteFunction -aliasName $aliasName -server $split.Server -targetSubPath $split.SubPath -driveLetter $driveLetter
                     $needsSave = $true
                 } else {
-                    Write-Host "WARNING: Route '$aliasName' tak boleh migrate (format path tak valid), skip." -ForegroundColor Red
+                    Write-Host (Tr 'MigrateFail' $aliasName) -ForegroundColor Red
                 }
             } else {
                 # NEW FORMAT already
-                                $migratedRoutes[$aliasName] = $routeData
+                $migratedRoutes[$aliasName] = $routeData
                 if ($routeData.Type -eq "local") {
                     Register-LocalRouteFunction -aliasName $aliasName -path $routeData.Path
                 } else {
@@ -239,7 +360,7 @@ function Load-Routes {
 
         if ($needsSave) {
             $migratedRoutes | ConvertTo-Json | Set-Content $global:routesFile
-            Write-Host "SUCCESS: Semua route lama dah auto-migrate ke format baru." -ForegroundColor Green
+            Write-Host (Tr 'MigrateDone') -ForegroundColor Green
         }
     } else {
         @{} | ConvertTo-Json | Set-Content $global:routesFile
@@ -248,20 +369,20 @@ function Load-Routes {
 
 function newpath {
     Write-Host ""
-    $path = Read-Host "Paste path routes (contoh: \\server01\share\myapp)"
+    $path = Read-Host (Tr 'PastePath')
     $path = $path.Trim().Trim('"')
 
     if (-not (Test-Path $path)) {
-        Write-Host "WARNING: Path ni tak jumpa/tak boleh access dari sini." -ForegroundColor Yellow
-        $confirm = Read-Host "Confirm nak simpan jugak? (Y/N)"
+        Write-Host (Tr 'PathWarn') -ForegroundColor Yellow
+        $confirm = Read-Host (Tr 'ConfirmSave')
         if ($confirm -ne "Y" -and $confirm -ne "y") {
-            Write-Host "Cancelled." -ForegroundColor Red
+            Write-Host (Tr 'Cancelled') -ForegroundColor Red
             return
         }
     }
 
     if ($path -notmatch '^\\\\') {
-        $aliasName = Read-Host "Nak letak alias apa untuk file/folder ni? (contoh: watermark)"
+        $aliasName = Read-Host (Tr 'AliasLocalPrompt')
         $routes = @{}
         if (Test-Path $global:routesFile) {
             $existing = Get-Content $global:routesFile -Raw | ConvertFrom-Json
@@ -271,19 +392,19 @@ function newpath {
         $routes | ConvertTo-Json | Set-Content $global:routesFile
         Register-LocalRouteFunction -aliasName $aliasName -path $path
         Write-Host ""
-        Write-Host "SUCCESS: Alias '$aliasName' -> $path (local)" -ForegroundColor Green
-        Write-Host "Type '$aliasName' untuk run/buka." -ForegroundColor Cyan
+        Write-Host (Tr 'AliasLocalOk' $aliasName $path) -ForegroundColor Green
+        Write-Host (Tr 'TypeToRun' $aliasName) -ForegroundColor Cyan
         Write-Host ""
         return
     }
 
     $split = Split-RoutePath -fullPath $path
     if (-not $split) {
-        Write-Host "ERROR: Path format tak valid. Kena format \\server\share\..." -ForegroundColor Red
+        Write-Host (Tr 'BadFormat') -ForegroundColor Red
         return
     }
 
-    $aliasName = Read-Host "Nak letak alias apa untuk route ni? (contoh: myapp)"
+    $aliasName = Read-Host (Tr 'AliasRoutePrompt')
 
     $routes = @{}
     $usedLetters = @()
@@ -296,7 +417,7 @@ function newpath {
     }
 
     if ($routes.ContainsKey($aliasName)) {
-        Write-Host "WARNING: Alias '$aliasName' dah wujud, overwrite path lama." -ForegroundColor Yellow
+        Write-Host (Tr 'AliasExists' $aliasName) -ForegroundColor Yellow
         $usedLetters = $usedLetters | Where-Object { $_ -ne ($routes[$aliasName].DriveLetter -replace ":", "") }
     }
 
@@ -313,8 +434,8 @@ function newpath {
     Register-RouteFunction -aliasName $aliasName -server $split.Server -targetSubPath $split.SubPath -driveLetter $driveLetter
 
     Write-Host ""
-    Write-Host "SUCCESS: Alias '$aliasName' -> $($split.Server)\$($split.SubPath) (drive $driveLetter)" -ForegroundColor Green
-    Write-Host "Boleh terus type '$aliasName' untuk masuk folder ni bila-bila masa." -ForegroundColor Cyan
+    Write-Host (Tr 'AliasRouteOk' $aliasName "$($split.Server)\$($split.SubPath)" $driveLetter) -ForegroundColor Green
+    Write-Host (Tr 'TypeToEnter' $aliasName) -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -322,15 +443,15 @@ function scanmuka {
     $scriptPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "ScanMuka\App.py"
     if (Test-Path $scriptPath) {
         Write-Host ""
-        Write-Host "Running ScanMuka..." -ForegroundColor Cyan
+        Write-Host (Tr 'RunningScan') -ForegroundColor Cyan
         python $scriptPath
     } else {
-        Write-Host "ERROR: File tak jumpa kat $scriptPath" -ForegroundColor Red
+        Write-Host (Tr 'FileNotFound' $scriptPath) -ForegroundColor Red
     }
 }
 
 function list {
-        $bootLines = @("[*] Initializing route table...", "[*] Decrypting alias map...", "[*] Access granted.")
+    $bootLines = @("[*] Initializing route table...", "[*] Decrypting alias map...", "[*] Access granted.")
     foreach ($line in $bootLines) {
         Write-Host $line -ForegroundColor DarkGreen
         Start-Sleep -Milliseconds 200
@@ -344,14 +465,14 @@ function list {
     Write-Host " |_| \_\\___/ \___/  |_| |_____|____/ " -ForegroundColor Green
     Write-Host ""
     if ($global:LegacyRouteInfo) {
-        Write-Host "=== ROUTES (LOCAL - dari local.ps1) ===" -ForegroundColor Cyan
+        Write-Host (Tr 'HdrLocal') -ForegroundColor Cyan
         foreach ($info in $global:LegacyRouteInfo) {
             Write-Host "  $($info.Name)" -ForegroundColor Green -NoNewline
             Write-Host " -> $($info.Target)" -ForegroundColor DarkGray
         }
     }
     Write-Host ""
-    Write-Host "=== ROUTES (BARU - dari newpath) ===" -ForegroundColor Cyan
+    Write-Host (Tr 'HdrNew') -ForegroundColor Cyan
     $hasRoutes = $false
     if (Test-Path $global:routesFile) {
         $routes = Get-Content $global:routesFile -Raw | ConvertFrom-Json
@@ -366,17 +487,17 @@ function list {
         }
     }
     if (-not $hasRoutes) {
-        Write-Host "  (takde lagi)" -ForegroundColor DarkGray
+        Write-Host "  $(Tr 'NoneYet')" -ForegroundColor DarkGray
     }
     Write-Host ""
     Write-Host "  newpath" -ForegroundColor Yellow -NoNewline
-    Write-Host " -> tambah route baru" -ForegroundColor DarkGray
+    Write-Host " $(Tr 'AddRoute')" -ForegroundColor DarkGray
     Write-Host ""
 }
 
-# Load private extras (tak masuk git): %USERPROFILE%\PSRoutes\local.ps1
+# Load private extras (not in git): %USERPROFILE%\PSRoutes\local.ps1
 $localExtras = Join-Path $global:PSDataDir "local.ps1"
 if (Test-Path $localExtras) { . $localExtras }
 
-# Load semua saved routes bila terminal start
+# Load all saved routes when the terminal starts
 Load-Routes

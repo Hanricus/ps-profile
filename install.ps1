@@ -76,17 +76,26 @@ function Install-PSRoutes {
     Write-Host "Love you all! - Shakir (Hanricus)" -ForegroundColor Magenta
     Write-Host ""
 
-    $open = Read-Host "Do you want to open the code now to take a look? (Y/N)"
-    if ($open -match '^[Yy]') {
-        if (Get-Command code -ErrorAction SilentlyContinue) {
-            & code $main
-        } else {
-            Start-Process notepad.exe -ArgumentList "`"$main`""
-        }
+        Write-Host "Let's test it. How do you want to run 'list'?" -ForegroundColor Cyan
+    Write-Host "  [1] Open a new PowerShell window (recommended)"
+    Write-Host "  [2] Reload the profile in this window"
+    Write-Host "  [N] Skip"
+    $choice = Read-Host "Choose 1 / 2 / N"
+
+    if ($choice -eq "1") {
+        $exe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
+        Start-Process $exe -ArgumentList "-NoExit", "-Command", "list"
     }
 
+    # option 2 is run below, outside the function, so it loads into the current session
+    $global:PSRoutesChoice = $choice
+    $global:PSRoutesMain   = $main
+
     Write-Host ""
-    Write-Host "Done. Close this window and open a new PowerShell." -ForegroundColor Cyan
+    Write-Host "Done." -ForegroundColor Cyan
 }
 
 Install-PSRoutes
+
+if ($global:PSRoutesChoice -eq "2") { . $global:PSRoutesMain; list }
+Remove-Variable PSRoutesChoice, PSRoutesMain -Scope Global -ErrorAction SilentlyContinue

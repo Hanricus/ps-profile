@@ -592,7 +592,7 @@ function newpath {
         DriveLetter = $driveLetter
     }
     $routes[$aliasName] = $routeObj
-    $routes | ConvertTo-Json | Set-Content $global:routesFile
+    if (-not (Save-Routes $routes)) { return }
 
     Register-RouteFunction -aliasName $aliasName -server $split.Server -targetSubPath $split.SubPath -driveLetter $driveLetter
 

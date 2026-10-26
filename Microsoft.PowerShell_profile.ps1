@@ -433,7 +433,18 @@ function refreshpath {
             $canSearch = [bool]$r.SubPath
         }
         if ($offline) { Write-Host "  [OFFLINE] $name ($hostName), skip" -ForegroundColor DarkGray; continue }
-        if (Test-Path -LiteralPath $full) { Write-Host "  [OK] $name" -ForegroundColor Green; continue }
+        $state = "missing"
+        try {
+            if (Test-Path -LiteralPath $full -ErrorAction Stop) { $state = "ok" }
+        } catch {
+            if ($_.CategoryInfo.Category -eq 'PermissionDenied' -or $_.Exception.Message -match 'denied') { $state = "denied" }
+        }
+        if ($state -eq "denied" -and $r.Type -ne "local" -and $r.DriveLetter) {
+            $viaDrive = if ($r.SubPath) { "$($r.DriveLetter)\$($r.SubPath)" } else { "$($r.DriveLetter)\" }
+            try { if (Test-Path -LiteralPath $viaDrive -ErrorAction Stop) { $state = "ok" } } catch { }
+        }
+        if ($state -eq "ok") { Write-Host "  [OK] $name" -ForegroundColor Green; continue }
+        if ($state -eq "denied") { Write-Host "  [TAK BOLEH AKSES] $name (access denied dari sini), skip" -ForegroundColor DarkYellow; continue }
 
         Write-Host "  [HILANG] $name -> $full" -ForegroundColor Red
         $parent = Split-Path $full -Parent
@@ -447,7 +458,15 @@ function refreshpath {
             } | Select-Object -ExpandProperty Name)
         }
         for ($i = 0; $i -lt $cands.Count; $i++) { Write-Host ("      [{0}] mungkin nama baru: {1}" -f ($i + 1), $cands[$i]) -ForegroundColor Cyan }
-        $ans = Read-Host "      Nombor (rename) / D (padam route) / Enter (skip)"
+        $ans = Read-Host "      Nombor (rename) / R (taip nama baru) / D (padam route) / Enter (skip)"
+        if ($ans -in @("R", "r")) {
+            $typed = (Read-Host "      Nama folder baru").Trim()
+            if ($typed) {
+                if (-not (Test-Path -LiteralPath (Join-Path $parent $typed))) { Write-Host "      WARNING: '$typed' tak jumpa dalam $parent" -ForegroundColor Yellow }
+                $cands = @($typed)
+                $ans = "1"
+            }
+        }
 
         if ($ans -match '^\d+$' -and [int]$ans -ge 1 -and [int]$ans -le $cands.Count) {
             $newLeaf = $cands[[int]$ans - 1]

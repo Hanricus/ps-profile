@@ -356,6 +356,124 @@ function Get-NextFreeLetter {
     return "Y:" # fallback
 }
 
+function Save-Routes {
+    param($routes)
+    $json = $routes | ConvertTo-Json -Depth 5
+    for ($i = 0; $i -lt 5; $i++) {
+        try {
+            Set-Content -Path $global:routesFile -Value $json -ErrorAction Stop
+            return $true
+        } catch { Start-Sleep -Milliseconds 400 }
+    }
+    Write-Host "ERROR: Gagal simpan, ps-routes.json dikunci proses lain. Tutup tab PowerShell/editor lain, cuba semula." -ForegroundColor Red
+    return $false
+}
+
+function Get-RoutesTable {
+    $routes = [ordered]@{}
+    if (Test-Path $global:routesFile) {
+        try {
+            $existing = Get-Content $global:routesFile -Raw | ConvertFrom-Json
+            if ($existing) { $existing.PSObject.Properties | ForEach-Object { $routes[$_.Name] = $_.Value } }
+        } catch { return $null }
+    }
+    return ,$routes
+}
+
+function delpath {
+    param([string]$aliasName = "")
+    $routes = Get-RoutesTable
+    if ($null -eq $routes) { Write-Host "ERROR: Gagal baca ps-routes.json." -ForegroundColor Red; return }
+    if ($routes.Count -eq 0) { Write-Host "(takde route)" -ForegroundColor DarkGray; return }
+    if (-not $aliasName) {
+        $names = @($routes.Keys)
+        for ($i = 0; $i -lt $names.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i + 1), $names[$i]) -ForegroundColor Green }
+        $pick = Read-Host "Nombor atau nama alias nak padam"
+        if ($pick -match '^\d+$' -and [int]$pick -ge 1 -and [int]$pick -le $names.Count) { $aliasName = $names[[int]$pick - 1] } else { $aliasName = $pick }
+    }
+    if (-not $routes.Contains($aliasName)) { Write-Host "ERROR: Alias '$aliasName' tak jumpa." -ForegroundColor Red; return }
+    $confirm = Read-Host "Padam route '$aliasName'? (Y/N)"
+    if ($confirm -notin @("Y", "y")) { Write-Host (Tr 'Cancelled') -ForegroundColor Red; return }
+    $routes.Remove($aliasName)
+    if (-not (Save-Routes $routes)) { return }
+    Remove-Item -LiteralPath "Function:\$aliasName" -Force -ErrorAction SilentlyContinue
+    Write-Host "SUCCESS: Route '$aliasName' dipadam." -ForegroundColor Green
+}
+
+function refreshpath {
+    $routes = Get-RoutesTable
+    if ($null -eq $routes) { Write-Host "ERROR: Gagal baca ps-routes.json." -ForegroundColor Red; return }
+    if ($routes.Count -eq 0) { Write-Host "(takde route)" -ForegroundColor DarkGray; return }
+    $changed = $false
+    Write-Host ""
+    foreach ($name in @($routes.Keys)) {
+        $r = $routes[$name]
+
+        # Route local yang tersalah simpan sebagai network (bug migrate lama)
+        if ($r.Type -ne "local") {
+            $full = if ($r.SubPath) { "$($r.Server)\$($r.SubPath)" } else { "$($r.Server)" }
+            $full = $full -replace '^\\\\([A-Za-z]:)', '$1'
+            if ($full -match '^[A-Za-z]:\\') {
+                $r = [PSCustomObject]@{ Type = "local"; Path = $full.TrimEnd('\') }
+                $routes[$name] = $r
+                Register-LocalRouteFunction -aliasName $name -path $r.Path
+                $changed = $true
+                Write-Host "  [FIX] $name -> $($r.Path) (ditukar ke local)" -ForegroundColor Yellow
+            }
+        }
+
+        $offline = $false
+        if ($r.Type -eq "local") {
+            $full = $r.Path
+            $canSearch = $true
+        } else {
+            $full = if ($r.SubPath) { "$($r.Server)\$($r.SubPath)" } else { "$($r.Server)" }
+            $hostName = ($r.Server -replace '^\\\\', '') -split '\\' | Select-Object -First 1
+            $offline = -not (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)
+            $canSearch = [bool]$r.SubPath
+        }
+        if ($offline) { Write-Host "  [OFFLINE] $name ($hostName), skip" -ForegroundColor DarkGray; continue }
+        if (Test-Path -LiteralPath $full) { Write-Host "  [OK] $name" -ForegroundColor Green; continue }
+
+        Write-Host "  [HILANG] $name -> $full" -ForegroundColor Red
+        $parent = Split-Path $full -Parent
+        $leaf = Split-Path $full -Leaf
+        $cands = @()
+        if ($canSearch -and $parent -and (Test-Path -LiteralPath $parent)) {
+            $oldN = ($leaf.ToLower() -replace '[^a-z0-9]', '')
+            $cands = @(Get-ChildItem -LiteralPath $parent -ErrorAction SilentlyContinue | Where-Object {
+                $n = ($_.Name.ToLower() -replace '[^a-z0-9]', '')
+                $n.Length -ge 3 -and $oldN.Length -ge 3 -and ($n.Contains($oldN) -or $oldN.Contains($n))
+            } | Select-Object -ExpandProperty Name)
+        }
+        for ($i = 0; $i -lt $cands.Count; $i++) { Write-Host ("      [{0}] mungkin nama baru: {1}" -f ($i + 1), $cands[$i]) -ForegroundColor Cyan }
+        $ans = Read-Host "      Nombor (rename) / D (padam route) / Enter (skip)"
+
+        if ($ans -match '^\d+$' -and [int]$ans -ge 1 -and [int]$ans -le $cands.Count) {
+            $newLeaf = $cands[[int]$ans - 1]
+            if ($r.Type -eq "local") {
+                $r.Path = Join-Path $parent $newLeaf
+                Register-LocalRouteFunction -aliasName $name -path $r.Path
+            } else {
+                $r.SubPath = if ($r.SubPath -match '\\') { (Split-Path $r.SubPath -Parent) + "\" + $newLeaf } else { $newLeaf }
+                Register-RouteFunction -aliasName $name -server $r.Server -targetSubPath $r.SubPath -driveLetter $r.DriveLetter
+            }
+            $routes[$name] = $r
+            $changed = $true
+            Write-Host "      -> dikemaskini ke $newLeaf" -ForegroundColor Green
+        } elseif ($ans -in @("D", "d")) {
+            $routes.Remove($name)
+            Remove-Item -LiteralPath "Function:\$name" -Force -ErrorAction SilentlyContinue
+            $changed = $true
+            Write-Host "      -> route '$name' dipadam" -ForegroundColor Yellow
+        }
+    }
+    Write-Host ""
+    if ($changed) {
+        if (Save-Routes $routes) { Write-Host "SUCCESS: Perubahan disimpan." -ForegroundColor Green }
+    }
+}
+
 function Load-Routes {
     if (Test-Path $global:routesFile) {
         $routes = Get-Content $global:routesFile -Raw | ConvertFrom-Json
@@ -434,7 +552,7 @@ function newpath {
             $existing.PSObject.Properties | ForEach-Object { $routes[$_.Name] = $_.Value }
         }
         $routes[$aliasName] = [PSCustomObject]@{ Type = "local"; Path = $path }
-        $routes | ConvertTo-Json | Set-Content $global:routesFile
+        if (-not (Save-Routes $routes)) { return }
         Register-LocalRouteFunction -aliasName $aliasName -path $path
         Write-Host ""
         Write-Host (Tr 'AliasLocalOk' $aliasName $path) -ForegroundColor Green
@@ -538,6 +656,10 @@ function list {
     Write-Host ""
     Write-Host "  newpath" -ForegroundColor Yellow -NoNewline
     Write-Host " $(Tr 'AddRoute')" -ForegroundColor DarkGray
+    Write-Host "  delpath" -ForegroundColor Yellow -NoNewline
+    Write-Host " -> padam route" -ForegroundColor DarkGray
+    Write-Host "  refreshpath" -ForegroundColor Yellow -NoNewline
+    Write-Host " -> semak route rosak, folder kena rename atau delete" -ForegroundColor DarkGray
     Write-Host ""
     Test-PSRoutesUpdate
 }

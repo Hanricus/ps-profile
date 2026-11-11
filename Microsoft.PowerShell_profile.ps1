@@ -168,7 +168,7 @@ function Test-PSRoutesUpdate {
 
 # Re-runs the installer, which detects the existing install and updates it
 function psdiag {
-    Write-Host "=== PSRoutes diag (paste output ni kat Shakir) ===" -ForegroundColor Cyan
+    Write-Host "=== PSRoutes diag (paste output ni kat Yolo) ===" -ForegroundColor Cyan
     Write-Host "Version  : $global:PSRoutesVersion"
     Write-Host "PS       : $($PSVersionTable.PSVersion)"
     Write-Host "Profile  : $PROFILE"

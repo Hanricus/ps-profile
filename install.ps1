@@ -89,7 +89,12 @@ function Install-PSRoutes {
             Write-Host "Old profile backed up: $t.bak" -ForegroundColor Yellow
         }
 
-        Set-Content -Path $t -Value $stub -Encoding UTF8
+        $written = $false
+        for ($i = 0; $i -lt 6; $i++) {
+            try { Set-Content -Path $t -Value $stub -Encoding UTF8 -ErrorAction Stop; $written = $true; break }
+            catch { Start-Sleep -Seconds 2 }
+        }
+        if (-not $written) { throw "Fail profile dikunci proses lain (OneDrive / tab PowerShell / VSC). Tutup semua, tunggu OneDrive siap sync, run semula. Fail: $t" }
         Write-Host "Profile installed: $t" -ForegroundColor Green
     }
 
@@ -105,7 +110,7 @@ function Install-PSRoutes {
         Write-Host "Thank you for installing PSRoutes! (v$newVer)" -ForegroundColor Cyan
         Write-Host "I made this just for fun, so please use it, change it and"
         Write-Host "customize it however you like. Make it yours."
-        Write-Host "Love you all! - Shakir (Hanricus)" -ForegroundColor Magenta
+        Write-Host "Love you all! - Yolo" -ForegroundColor Magenta
     }
     Write-Host ""
 
@@ -123,7 +128,7 @@ try { Install-PSRoutes } catch {
     Write-Host ""
     Write-Host "INSTALL GAGAL: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkYellow
-    Write-Host "Screenshot error ni dan hantar kat Shakir." -ForegroundColor Yellow
+    Write-Host "Screenshot error ni dan hantar kat Yolo." -ForegroundColor Yellow
 }
 
 if ($global:PSRoutesChoice -eq "2") { . $global:PSRoutesMain; list }

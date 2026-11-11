@@ -27,7 +27,12 @@ function Install-PSRoutes {
     }
 
     Write-Host ""
-    Write-Host "PSRoutes installer" -ForegroundColor Cyan
+    Write-Host ' ____  ____    ____   ___  _   _ _____ _____ ____  ' -ForegroundColor Green
+    Write-Host '|  _ \/ ___|  |  _ \ / _ \| | | |_   _| ____/ ___| ' -ForegroundColor Green
+    Write-Host '| |_) \___ \  | |_) | | | | | | | | | |  _| \___ \ ' -ForegroundColor Green
+    Write-Host '|  __/ ___) | |  _ <| |_| | |_| | | | | |___ ___) |' -ForegroundColor Green
+    Write-Host '|_|   |____/  |_| \_\\___/ \___/  |_| |_____|____/ ' -ForegroundColor Green
+    Write-Host '                                          ~ by yolo' -ForegroundColor DarkGray
     Write-Host ""
 
     if ($isUpdate) {
@@ -35,15 +40,10 @@ function Install-PSRoutes {
         Write-Host "Your routes, settings and local.ps1 will be kept." -ForegroundColor DarkGray
         Write-Host ""
     } else {
-        Write-Host "This will create (or replace) your PowerShell profile at:"
+        Write-Host "Installing PSRoutes to:" -ForegroundColor Cyan
         foreach ($t in $targets) { Write-Host "  $t" -ForegroundColor Yellow }
-        Write-Host "An existing profile will be backed up as .bak first."
+        Write-Host "Existing profile (if any) is backed up as .bak first." -ForegroundColor DarkGray
         Write-Host ""
-        $answer = Read-Host "Continue? (Y/N)"
-        if ($answer -notmatch '^[Yy]') {
-            Write-Host "Cancelled. Nothing was changed." -ForegroundColor Yellow
-            return
-        }
     }
 
     # Kalau run dari repo yang dah clone, guna folder tu. Kalau tak, download.
@@ -109,16 +109,7 @@ function Install-PSRoutes {
     }
     Write-Host ""
 
-    Write-Host "Let's test it. How do you want to run 'list'?" -ForegroundColor Cyan
-    Write-Host "  [1] Open a new PowerShell window (recommended)"
-    Write-Host "  [2] Reload the profile in this window"
-    Write-Host "  [N] Skip"
-    $choice = Read-Host "Choose 1 / 2 / N"
-
-    if ($choice -eq "1") {
-        $exe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
-        Start-Process $exe -ArgumentList "-NoExit", "-Command", "list"
-    }
+    $choice = "2"
 
     # option 2 is run below, outside the function, so it loads into the current session
     $global:PSRoutesChoice = $choice
@@ -128,7 +119,12 @@ function Install-PSRoutes {
     Write-Host "Done." -ForegroundColor Cyan
 }
 
-Install-PSRoutes
+try { Install-PSRoutes } catch {
+    Write-Host ""
+    Write-Host "INSTALL GAGAL: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkYellow
+    Write-Host "Screenshot error ni dan hantar kat Shakir." -ForegroundColor Yellow
+}
 
 if ($global:PSRoutesChoice -eq "2") { . $global:PSRoutesMain; list }
 Remove-Variable PSRoutesChoice, PSRoutesMain -Scope Global -ErrorAction SilentlyContinue

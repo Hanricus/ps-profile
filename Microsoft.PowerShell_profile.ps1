@@ -155,7 +155,7 @@ function Test-PSRoutesUpdate {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $latest = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/VERSION" -TimeoutSec 3 -UseBasicParsing).ToString().Trim()
             @{ Checked = $now; Latest = $latest } | ConvertTo-Json | Set-Content $cacheFile
-        } catch { return }   # offline / repo private / no VERSION -> stay silent
+        } catch { $global:PSUpdateError = $_.Exception.Message; return }
     }
     try {
         if ([version]$latest -gt [version]$global:PSRoutesVersion) {
@@ -167,6 +167,23 @@ function Test-PSRoutesUpdate {
 }
 
 # Re-runs the installer, which detects the existing install and updates it
+function psdiag {
+    Write-Host "=== PSRoutes diag (paste output ni kat Shakir) ===" -ForegroundColor Cyan
+    Write-Host "Version  : $global:PSRoutesVersion"
+    Write-Host "PS       : $($PSVersionTable.PSVersion)"
+    Write-Host "Profile  : $PROFILE"
+    try { Write-Host "Stub     : $((Get-Content $PROFILE -Raw).Trim())" } catch { Write-Host "Stub     : ERROR $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host "Data dir : $global:PSDataDir"
+    Write-Host "Routes   : $global:routesFile (ada: $(Test-Path $global:routesFile))"
+    Write-Host "ExecPol  : $(Get-ExecutionPolicy -Scope CurrentUser)"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $v = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/VERSION" -TimeoutSec 5 -UseBasicParsing).ToString().Trim()
+        Write-Host "Latest   : $v"
+    } catch { Write-Host "Latest   : GAGAL - $($_.Exception.Message)" -ForegroundColor Red }
+    Get-PSDrive -PSProvider FileSystem | Where-Object { $_.DisplayRoot } | ForEach-Object { Write-Host "Drive    : $($_.Name): -> $($_.DisplayRoot)" }
+}
+
 function psupdate {
     Invoke-RestMethod "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/install.ps1" | Invoke-Expression
 }
@@ -495,7 +512,14 @@ function refreshpath {
 
 function Load-Routes {
     if (Test-Path $global:routesFile) {
-        $routes = Get-Content $global:routesFile -Raw | ConvertFrom-Json
+        try {
+            $routes = Get-Content $global:routesFile -Raw | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Write-Host "ERROR: ps-routes.json tak boleh dibaca: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Fail: $global:routesFile (betulkan atau padam fail tu)" -ForegroundColor Yellow
+            return
+        }
+        if (-not $routes) { return }
         $migratedRoutes = @{}
         $needsSave = $false
         $usedLetters = @()
@@ -549,18 +573,38 @@ function Load-Routes {
     }
 }
 
+function Get-DriveUnc {
+    param([string]$dl)
+    $unc = $null
+    try { $unc = (Get-PSDrive -Name $dl.TrimEnd(':') -ErrorAction Stop).DisplayRoot } catch { }
+    if (-not $unc) {
+        try { $unc = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$dl'" -ErrorAction Stop).ProviderName } catch { }
+    }
+    if (-not $unc) {
+        try {
+            $out = (net use $dl 2>$null) -join "`n"
+            if ($out -match '(?m)^\s*(Remote name|Nama jauh)\s+(\\\\\S+)') { $unc = $matches[2] }
+        } catch { }
+    }
+    if ($unc -and $unc -match '^\\\\') { return $unc }
+    return $null
+}
+
 function newpath {
     Write-Host ""
     $path = Read-Host (Tr 'PastePath')
     $path = $path.Trim().Trim('"')
 
     if ($path -match '^([A-Za-z]:)(\\.*)?$') {
-        $dl = $matches[1]
+        $dl = $matches[1].ToUpper()
         $rest = $matches[2]
-        $unc = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$dl'" -ErrorAction SilentlyContinue).ProviderName
-        if ($unc -and $unc -match '^\\\\') {
+        $unc = Get-DriveUnc $dl
+        if ($unc) {
             $path = $unc.TrimEnd('\') + $rest
             Write-Host "Drive $dl -> $path" -ForegroundColor DarkYellow
+        } elseif (-not (Test-Path "$dl\")) {
+            Write-Host "ERROR: Drive $dl tak wujud kat PC ni. Connect drive tu dulu, lepas tu cuba semula." -ForegroundColor Red
+            return
         }
     }
 

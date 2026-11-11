@@ -3,6 +3,49 @@
 # Cara 2: git clone repo, lepas tu run .\install.ps1
 # Run baris yang sama lagi sekali untuk UPDATE. Route, setting dan local.ps1 kau tak disentuh.
 
+function Get-FileLockers {
+    param([string]$Path)
+    try {
+        if (-not ('PSRLock' -as [type])) {
+            Add-Type -TypeDefinition @"
+using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
+public static class PSRLock {
+    [StructLayout(LayoutKind.Sequential)] struct RM_UNIQUE_PROCESS { public int dwProcessId; public System.Runtime.InteropServices.ComTypes.FILETIME ProcessStartTime; }
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct RM_PROCESS_INFO {
+        public RM_UNIQUE_PROCESS Process;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst=256)] public string strAppName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst=64)] public string strServiceShortName;
+        public int ApplicationType; public uint AppStatus; public uint TSSessionId;
+        [MarshalAs(UnmanagedType.Bool)] public bool bRestartable;
+    }
+    [DllImport("rstrtmgr.dll", CharSet=CharSet.Unicode)] static extern int RmStartSession(out uint h, int flags, StringBuilder key);
+    [DllImport("rstrtmgr.dll")] static extern int RmEndSession(uint h);
+    [DllImport("rstrtmgr.dll", CharSet=CharSet.Unicode)] static extern int RmRegisterResources(uint h, uint nFiles, string[] files, uint nApps, RM_UNIQUE_PROCESS[] apps, uint nSvc, string[] svc);
+    [DllImport("rstrtmgr.dll")] static extern int RmGetList(uint h, out uint needed, ref uint count, [In, Out] RM_PROCESS_INFO[] info, out uint reasons);
+    public static string[] Who(string path) {
+        var res = new List<string>(); uint h;
+        var key = new StringBuilder(33);
+        if (RmStartSession(out h, 0, key) != 0) return res.ToArray();
+        try {
+            RmRegisterResources(h, 1, new[] { path }, 0, null, 0, null);
+            uint needed = 0, count = 0, reasons;
+            int r = RmGetList(h, out needed, ref count, null, out reasons);
+            if (r == 234 && needed > 0) {
+                count = needed;
+                var info = new RM_PROCESS_INFO[count];
+                r = RmGetList(h, out needed, ref count, info, out reasons);
+                if (r == 0) for (int i = 0; i < count; i++) res.Add(info[i].strAppName + " (PID " + info[i].Process.dwProcessId + ")");
+            }
+        } finally { RmEndSession(h); }
+        return res.ToArray();
+    }
+}
+"@
+        }
+        return [PSRLock]::Who($Path)
+    } catch { return @() }
+}
+
 function Install-PSRoutes {
     $ErrorActionPreference = "Stop"
     $Owner  = "Hanricus"
@@ -91,11 +134,27 @@ function Install-PSRoutes {
 
         $cur = if (Test-Path $t) { Get-Content $t -Raw -ErrorAction SilentlyContinue } else { $null }
         $written = [bool]($cur -and $cur.Trim() -eq $stub)
-        for ($i = 0; $i -lt 6 -and -not $written; $i++) {
-            try { Set-Content -Path $t -Value $stub -Encoding UTF8 -ErrorAction Stop; $written = $true; break }
-            catch { Start-Sleep -Seconds 2 }
+        for ($round = 1; $round -le 3 -and -not $written; $round++) {
+            for ($i = 0; $i -lt 4 -and -not $written; $i++) {
+                try { Set-Content -Path $t -Value $stub -Encoding UTF8 -ErrorAction Stop; $written = $true }
+                catch { Start-Sleep -Seconds 1 }
+            }
+            if ($written) { break }
+            Write-Host ""
+            Write-Host "Fail profile sedang dikunci:" -ForegroundColor Red
+            Write-Host "  $t" -ForegroundColor DarkYellow
+            $lockers = @(Get-FileLockers $t)
+            if ($lockers.Count -gt 0) {
+                Write-Host "Proses yang guna fail ni:" -ForegroundColor Yellow
+                foreach ($l in $lockers) { Write-Host "  - $l" -ForegroundColor Yellow }
+                Write-Host "Tutup program tu dulu." -ForegroundColor Yellow
+            } else {
+                Write-Host "Tak dapat kesan proses. Biasanya OneDrive tengah sync, atau VSC/tab PowerShell lain buka fail ni." -ForegroundColor Yellow
+            }
+            $ans = Read-Host "Tekan Enter untuk cuba lagi (N untuk batal)"
+            if ($ans -match '^[Nn]') { break }
         }
-        if (-not $written) { throw "Fail profile dikunci proses lain (OneDrive / tab PowerShell / VSC). Tutup semua, tunggu OneDrive siap sync, run semula. Fail: $t" }
+        if (-not $written) { throw "Fail profile masih dikunci. Tutup program yang guna fail ni, lepas tu run semula. Fail: $t" }
         Write-Host "Profile installed: $t" -ForegroundColor Green
     }
 
@@ -125,12 +184,14 @@ function Install-PSRoutes {
     Write-Host "Done." -ForegroundColor Cyan
 }
 
+$global:PSRoutesFailed = $false
 try { Install-PSRoutes } catch {
+    $global:PSRoutesFailed = $true
     Write-Host ""
     Write-Host "INSTALL GAGAL: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkYellow
     Write-Host "Screenshot error ni dan hantar kat Yolo." -ForegroundColor Yellow
 }
 
-if ($global:PSRoutesChoice -eq "2") { . $global:PSRoutesMain; list }
-Remove-Variable PSRoutesChoice, PSRoutesMain -Scope Global -ErrorAction SilentlyContinue
+if ($global:PSRoutesChoice -eq "2" -and -not $global:PSRoutesFailed) { . $global:PSRoutesMain; list }
+Remove-Variable PSRoutesChoice, PSRoutesMain, PSRoutesFailed -Scope Global -ErrorAction SilentlyContinue

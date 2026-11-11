@@ -59,7 +59,7 @@ $global:Msg = @{
         LangUsage        = "Usage: lang en | lang my"
         LangSet          = "Language set to {0}"
         UpdateAvail      = "UPDATE AVAILABLE: v{0} -> v{1}"
-        UpdateHow        = "Type 'psupdate' to update (your routes and settings are kept)."
+        UpdateHow        = "Type 'psroutes update' to update (your routes and settings are kept)."
     }
     MY = @{
         Searching        = "Mencari network drive yang ada..."
@@ -103,7 +103,7 @@ $global:Msg = @{
         LangUsage        = "Guna: lang en | lang my"
         LangSet          = "Bahasa ditukar ke {0}"
         UpdateAvail      = "ADA KEMASKINI: v{0} -> v{1}"
-        UpdateHow        = "Type 'psupdate' untuk update (route dan setting kau kekal)."
+        UpdateHow        = "Type 'psroutes update' untuk update (route dan setting kau kekal)."
     }
 }
 
@@ -182,6 +182,20 @@ function psdiag {
         Write-Host "Latest   : $v"
     } catch { Write-Host "Latest   : GAGAL - $($_.Exception.Message)" -ForegroundColor Red }
     Get-PSDrive -PSProvider FileSystem | Where-Object { $_.DisplayRoot } | ForEach-Object { Write-Host "Drive    : $($_.Name): -> $($_.DisplayRoot)" }
+}
+
+function psroutes {
+    param([string]$cmd = "help")
+    switch ($cmd.ToLower()) {
+        "update"  { psupdate }
+        "diag"    { psdiag }
+        "version" { Write-Host "PSRoutes v$global:PSRoutesVersion" -ForegroundColor Cyan }
+        default {
+            Write-Host "psroutes update   -> update ke versi terbaru" -ForegroundColor Cyan
+            Write-Host "psroutes diag     -> info untuk hantar kat Yolo kalau ada masalah" -ForegroundColor Cyan
+            Write-Host "psroutes version  -> tunjuk versi" -ForegroundColor Cyan
+        }
+    }
 }
 
 function psupdate {

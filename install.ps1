@@ -89,8 +89,9 @@ function Install-PSRoutes {
             Write-Host "Old profile backed up: $t.bak" -ForegroundColor Yellow
         }
 
-        $written = $false
-        for ($i = 0; $i -lt 6; $i++) {
+        $cur = if (Test-Path $t) { Get-Content $t -Raw -ErrorAction SilentlyContinue } else { $null }
+        $written = [bool]($cur -and $cur.Trim() -eq $stub)
+        for ($i = 0; $i -lt 6 -and -not $written; $i++) {
             try { Set-Content -Path $t -Value $stub -Encoding UTF8 -ErrorAction Stop; $written = $true; break }
             catch { Start-Sleep -Seconds 2 }
         }

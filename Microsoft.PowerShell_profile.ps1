@@ -225,6 +225,24 @@ if (-not (Test-Path $global:routesFile)) {
 }
 $global:availableLetters = @("V","W","X","Y","Z","U","T","S","R","Q")
 
+function Invoke-NetUse {
+    param([string[]]$NetArgs, [int]$TimeoutSec = 20)
+    $o = New-TemporaryFile; $e = New-TemporaryFile
+    $p = Start-Process "net" -ArgumentList $NetArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $o.FullName -RedirectStandardError $e.FullName
+    $null = $p.Handle
+    if (-not $p.WaitForExit($TimeoutSec * 1000)) {
+        try { $p.Kill() } catch { }
+        Remove-Item $o.FullName, $e.FullName -Force -ErrorAction SilentlyContinue
+        return [PSCustomObject]@{ Ok = $false; Code = -1; Msg = "Timeout ${TimeoutSec}s, server tak respond (mungkin off, disconnect atau firewall)." }
+    }
+    $msg = ("$(Get-Content $e.FullName -Raw)$(Get-Content $o.FullName -Raw)").Trim()
+    $ok = ($p.ExitCode -eq 0)
+    $code = 0
+    if ($msg -match '(?i)(?:error|ralat)\s+(\d+)') { $code = [int]$matches[1] }
+    Remove-Item $o.FullName, $e.FullName -Force -ErrorAction SilentlyContinue
+    return [PSCustomObject]@{ Ok = $ok; Code = $code; Msg = $msg }
+}
+
 function Invoke-RouteConnect {
     param(
         [string]$aliasName,
@@ -270,8 +288,15 @@ function Invoke-RouteConnect {
         $hostName = ($server -replace "\\\\", "") -split "\\" | Select-Object -First 1
         Write-Host (Tr 'CheckingConn' $hostName) -ForegroundColor Yellow
 
-        if (-not (Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
-            Write-Host (Tr 'NotReachable' $hostName) -ForegroundColor Red
+        $smbOk = $false
+        try {
+            $tcp = New-Object Net.Sockets.TcpClient
+            $iar = $tcp.BeginConnect($hostName, 445, $null, $null)
+            $smbOk = $iar.AsyncWaitHandle.WaitOne(3000) -and $tcp.Connected
+            $tcp.Close()
+        } catch { }
+        if (-not $smbOk) {
+            Write-Host (Tr 'NotReachable' "$hostName (port 445)") -ForegroundColor Red
         } else {
             Write-Host (Tr 'Mapping' $server) -ForegroundColor Yellow
             $tempLetter = $driveLetter
@@ -296,7 +321,15 @@ function Invoke-RouteConnect {
                     Start-Process "net" -ArgumentList "use", $tempLetter, "/delete", "/yes" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
                     Start-Sleep -Milliseconds 500
 
-                    Start-Process "net" -ArgumentList "use", $tempLetter, $server, "/persistent:no" -WindowStyle Hidden -Wait -ErrorAction Stop
+                    $r = Invoke-NetUse @("use", $tempLetter, $server, "/persistent:no") 20
+                    if (-not $r.Ok -and $r.Code -in 5, 1326, 86, 1244) {
+                        Write-Host "Server minta login. Masukkan username dan password." -ForegroundColor Yellow
+                        $cred = Get-Credential -Message "Login untuk $server"
+                        if ($cred) {
+                            $r = Invoke-NetUse @("use", $tempLetter, $server, $cred.GetNetworkCredential().Password, "/user:$($cred.UserName)", "/persistent:no") 20
+                        }
+                    }
+                    if (-not $r.Ok) { throw $r.Msg }
                     Start-Sleep -Seconds 2
 
                     $testPath = if ($targetSubPath -ne "") { Join-Path $tempLetter $targetSubPath } else { "$tempLetter\" }

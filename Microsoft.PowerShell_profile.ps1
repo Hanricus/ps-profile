@@ -554,6 +554,16 @@ function newpath {
     $path = Read-Host (Tr 'PastePath')
     $path = $path.Trim().Trim('"')
 
+    if ($path -match '^([A-Za-z]:)(\\.*)?$') {
+        $dl = $matches[1]
+        $rest = $matches[2]
+        $unc = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$dl'" -ErrorAction SilentlyContinue).ProviderName
+        if ($unc -and $unc -match '^\\\\') {
+            $path = $unc.TrimEnd('\') + $rest
+            Write-Host "Drive $dl -> $path" -ForegroundColor DarkYellow
+        }
+    }
+
     if (-not (Test-Path $path)) {
         Write-Host (Tr 'PathWarn') -ForegroundColor Yellow
         $confirm = Read-Host (Tr 'ConfirmSave')

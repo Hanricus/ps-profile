@@ -204,7 +204,11 @@ if ($phpDir) { $env:Path = "$($phpDir.FullName);" + $env:Path }
 # See all routes:  type "list"
 # ============================================
 $global:routesFile = Join-Path $global:PSDataDir "ps-routes.json"
-if (-not (Test-Path $global:routesFile) -and (Test-Path "D:\ps-routes.json")) { Copy-Item "D:\ps-routes.json" $global:routesFile }
+if (-not (Test-Path $global:routesFile)) {
+    foreach ($old in @("D:\ps-routes.json", (Join-Path $env:USERPROFILE "ps-routes.json"))) {
+        if (Test-Path $old) { Copy-Item $old $global:routesFile; break }
+    }
+}
 $global:availableLetters = @("V","W","X","Y","Z","U","T","S","R","Q")
 
 function Invoke-RouteConnect {
@@ -555,6 +559,14 @@ function Load-Routes {
                 }
             } else {
                 # NEW FORMAT already
+                if ($routeData.Type -ne "local" -and $routeData.Server) {
+                    $fixed = ($routeData.Server -replace '^\\\\(?=[A-Za-z]:)', '')
+                    if ($routeData.SubPath) { $fixed = "$fixed\$($routeData.SubPath)" }
+                    if ($fixed -match '^[A-Za-z]:') {
+                        $routeData = [PSCustomObject]@{ Type = "local"; Path = $fixed.TrimEnd('\') }
+                        $needsSave = $true
+                    }
+                }
                 $migratedRoutes[$aliasName] = $routeData
                 if ($routeData.Type -eq "local") {
                     Register-LocalRouteFunction -aliasName $aliasName -path $routeData.Path

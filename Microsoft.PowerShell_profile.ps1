@@ -147,13 +147,13 @@ function Test-PSRoutesUpdate {
     if (Test-Path $cacheFile) {
         try {
             $c = Get-Content $cacheFile -Raw | ConvertFrom-Json
-            if (($now - [long]$c.Checked) -lt 43200) { $latest = $c.Latest }
+            if (($now - [long]$c.Checked) -lt 0) { $latest = $c.Latest }
         } catch { }
     }
     if (-not $latest) {
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $latest = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/VERSION" -TimeoutSec 3 -UseBasicParsing).ToString().Trim()
+            $latest = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$($global:PSRoutesRepo)/main/VERSION?t=$now" -TimeoutSec 3 -UseBasicParsing).ToString().Trim()
             @{ Checked = $now; Latest = $latest } | ConvertTo-Json | Set-Content $cacheFile
         } catch { $global:PSUpdateError = $_.Exception.Message; return }
     }

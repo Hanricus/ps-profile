@@ -363,6 +363,11 @@ function Invoke-RouteConnect {
         return
     }
 
+    if (Test-Path -LiteralPath $targetPath -PathType Leaf) {
+        Open-RouteFile $targetPath -uncPath ("$server\$targetSubPath".TrimEnd('\'))
+        return
+    }
+
     if ($currentLocation.Path -ne $targetPath) {
         Set-Location $targetPath
         Write-Host ""
@@ -371,6 +376,37 @@ function Invoke-RouteConnect {
     } else {
         Write-Host ""
     }
+}
+
+function Open-RouteFile {
+    param([string]$path, [string]$uncPath = "")
+    Write-Host ""
+    Write-Host "File: $(Split-Path $path -Leaf)" -ForegroundColor Cyan
+    Write-Host "  [V] Buka dengan VS Code" -ForegroundColor Green
+    Write-Host "  [D] Buka dengan app default (Enter)" -ForegroundColor Green
+    Write-Host "  [F] Masuk ke folder file ni" -ForegroundColor Green
+    $ans = (Read-Host "Pilih").Trim().ToUpper()
+    switch ($ans) {
+        "V" {
+            if (Get-Command code -ErrorAction SilentlyContinue) {
+                $openPath = if ($uncPath) { $uncPath } else { $path }
+                if (-not $uncPath -and $path -match '^([A-Za-z]:)(\\.*)?$') {
+                    $unc = Get-DriveUnc $matches[1]
+                    if ($unc) { $openPath = $unc.TrimEnd('\') + $matches[2] }
+                }
+                & code $openPath
+            } else {
+                Write-Host "WARNING: VS Code (command 'code') tak jumpa, buka guna app default." -ForegroundColor Yellow
+                Start-Process -FilePath $path
+            }
+        }
+        "F" {
+            Set-Location -LiteralPath (Split-Path $path -Parent)
+            Write-Host (Tr 'Navigated' (Get-Location).Path) -ForegroundColor Green
+        }
+        default { Start-Process -FilePath $path }
+    }
+    Write-Host ""
 }
 
 function Invoke-LocalRoute {

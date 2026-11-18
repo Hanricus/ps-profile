@@ -60,6 +60,10 @@ $global:Msg = @{
         LangSet          = "Language set to {0}"
         UpdateAvail      = "UPDATE AVAILABLE: v{0} -> v{1}"
         UpdateHow        = "Type 'psroutes update' to update (your routes and settings are kept)."
+        DelRouteDesc     = "-> delete a route"
+        RenameRouteDesc  = "-> rename a route alias"
+        RefreshRouteDesc = "-> check broken routes (folder renamed or deleted)"
+        LangRouteDesc    = "-> change language (lang en | lang my)"
     }
     MY = @{
         Searching        = "Mencari network drive yang ada..."
@@ -104,6 +108,10 @@ $global:Msg = @{
         LangSet          = "Bahasa ditukar ke {0}"
         UpdateAvail      = "ADA KEMASKINI: v{0} -> v{1}"
         UpdateHow        = "Type 'psroutes update' untuk update (route dan setting kau kekal)."
+        DelRouteDesc     = "-> padam route"
+        RenameRouteDesc  = "-> tukar nama alias route"
+        RefreshRouteDesc = "-> semak route rosak, folder kena rename atau delete"
+        LangRouteDesc    = "-> tukar bahasa (lang en | lang my)"
     }
 }
 
@@ -734,6 +742,41 @@ function newpath {
     Write-Host ""
 }
 
+function renamepath {
+    param([string]$oldName = "", [string]$newName = "")
+    $routes = Get-RoutesTable
+    if ($null -eq $routes) { Write-Host "ERROR: Gagal baca ps-routes.json." -ForegroundColor Red; return }
+    if ($routes.Count -eq 0) { Write-Host "(takde route)" -ForegroundColor DarkGray; return }
+    if (-not $oldName) {
+        $names = @($routes.Keys)
+        for ($i = 0; $i -lt $names.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i + 1), $names[$i]) -ForegroundColor Green }
+        $pick = Read-Host "Nombor atau nama alias nak rename"
+        if ($pick -match '^\d+$' -and [int]$pick -ge 1 -and [int]$pick -le $names.Count) { $oldName = $names[[int]$pick - 1] } else { $oldName = $pick }
+    }
+    if (-not $routes.Contains($oldName)) { Write-Host "ERROR: Alias '$oldName' tak jumpa." -ForegroundColor Red; return }
+    if (-not $newName) { $newName = (Read-Host "Nama baru untuk '$oldName'").Trim() }
+    if ($newName -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$') { Write-Host "ERROR: Nama tak valid. Guna huruf, nombor, - atau _ je (tak boleh ada space)." -ForegroundColor Red; return }
+    if ($newName -eq $oldName) { Write-Host (Tr 'Cancelled') -ForegroundColor Red; return }
+    if ($routes.Contains($newName)) { Write-Host "ERROR: Alias '$newName' dah wujud." -ForegroundColor Red; return }
+    if (Get-Command $newName -ErrorAction SilentlyContinue) { Write-Host "ERROR: '$newName' dah dipakai oleh command lain (contoh: list, lang). Pilih nama lain." -ForegroundColor Red; return }
+
+    # bina semula table supaya susunan kekal
+    $new = [ordered]@{}
+    foreach ($k in $routes.Keys) {
+        if ($k -eq $oldName) { $new[$newName] = $routes[$k] } else { $new[$k] = $routes[$k] }
+    }
+    if (-not (Save-Routes $new)) { return }
+
+    Remove-Item -LiteralPath "Function:\$oldName" -Force -ErrorAction SilentlyContinue
+    $r = $new[$newName]
+    if ($r.Type -eq "local") {
+        Register-LocalRouteFunction -aliasName $newName -path $r.Path
+    } else {
+        Register-RouteFunction -aliasName $newName -server $r.Server -targetSubPath $r.SubPath -driveLetter $r.DriveLetter
+    }
+    Write-Host "SUCCESS: Route '$oldName' -> '$newName'." -ForegroundColor Green
+}
+
 function scanmuka {
     $scriptPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "ScanMuka\App.py"
     if (Test-Path $scriptPath) {
@@ -789,9 +832,13 @@ function list {
     Write-Host "  newpath" -ForegroundColor Yellow -NoNewline
     Write-Host " $(Tr 'AddRoute')" -ForegroundColor DarkGray
     Write-Host "  delpath" -ForegroundColor Yellow -NoNewline
-    Write-Host " -> padam route" -ForegroundColor DarkGray
+    Write-Host " $(Tr 'DelRouteDesc')" -ForegroundColor DarkGray
+    Write-Host "  renamepath" -ForegroundColor Yellow -NoNewline
+    Write-Host " $(Tr 'RenameRouteDesc')" -ForegroundColor DarkGray
     Write-Host "  refreshpath" -ForegroundColor Yellow -NoNewline
-    Write-Host " -> semak route rosak, folder kena rename atau delete" -ForegroundColor DarkGray
+    Write-Host " $(Tr 'RefreshRouteDesc')" -ForegroundColor DarkGray
+    Write-Host "  lang" -ForegroundColor Yellow -NoNewline
+    Write-Host " $(Tr 'LangRouteDesc')" -ForegroundColor DarkGray
     Write-Host ""
     Test-PSRoutesUpdate
 }

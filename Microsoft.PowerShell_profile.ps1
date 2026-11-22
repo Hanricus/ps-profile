@@ -420,6 +420,18 @@ function Invoke-LocalRoute {
         Write-Host (Tr 'Navigated' $path) -ForegroundColor Green
     } elseif ([IO.Path]::GetExtension($path) -eq ".ps1") {
         & $path
+    } elseif ([IO.Path]::GetExtension($path) -eq ".py") {
+        Write-Host "File: $(Split-Path $path -Leaf)" -ForegroundColor Cyan
+        Write-Host "  [R] Run dengan Python (Enter)" -ForegroundColor Green
+        Write-Host "  [V] Buka dengan VS Code" -ForegroundColor Green
+        $ans = (Read-Host "Pilih").Trim().ToUpper()
+        if ($ans -eq "V" -and (Get-Command code -ErrorAction SilentlyContinue)) {
+            & code $path
+        } else {
+            $py = if (Get-Command py -ErrorAction SilentlyContinue) { "py" } else { "python" }
+            Push-Location (Split-Path $path -Parent)
+            try { & $py $path } finally { Pop-Location }
+        }
     } else {
         Write-Host (Tr 'Opening' $aliasName) -ForegroundColor Cyan
         if ([IO.Path]::GetExtension($path) -in ".bat", ".cmd") {

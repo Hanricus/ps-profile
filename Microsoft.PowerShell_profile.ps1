@@ -863,13 +863,28 @@ function list {
     $hasRoutes = $false
     if (Test-Path $global:routesFile) {
         $routes = Get-Content $global:routesFile -Raw | ConvertFrom-Json
-        $routes.PSObject.Properties | ForEach-Object {
-            $hasRoutes = $true
-            Write-Host "  $($_.Name)" -ForegroundColor Green -NoNewline
-            if ($_.Value.Type -eq "local") {
-                Write-Host " -> $($_.Value.Path) [local]" -ForegroundColor DarkGray
+        $desktop = [Environment]::GetFolderPath("Desktop")
+        $items = @($routes.PSObject.Properties | ForEach-Object {
+            $v = $_.Value
+            if ($v.Type -eq "local") {
+                $grp = if ($v.Path -like "$desktop*") { "Desktop" } else { "Local" }
+                $target = "$($v.Path)"
+                $tag = ""
             } else {
-                Write-Host " -> $($_.Value.Server)\$($_.Value.SubPath) [drive $($_.Value.DriveLetter)]" -ForegroundColor DarkGray
+                $grp = (($v.Server -replace '^\\\\', '') -split '\\')[0]
+                $target = "$($v.Server)\$($v.SubPath)"
+                $tag = " [drive $($v.DriveLetter)]"
+            }
+            [PSCustomObject]@{ Group = $grp; Name = $_.Name; Target = $target; Tag = $tag }
+        })
+        $groups = $items | Group-Object Group | Sort-Object { if ($_.Name -in @("Desktop", "Local")) { "~" + $_.Name } else { $_.Name } }
+        foreach ($g in $groups) {
+            $hasRoutes = $true
+            Write-Host ""
+            Write-Host "  ($($g.Name))" -ForegroundColor Cyan
+            foreach ($i in ($g.Group | Sort-Object Name)) {
+                Write-Host "    $($i.Name)" -ForegroundColor Green -NoNewline
+                Write-Host " -> $($i.Target)$($i.Tag)" -ForegroundColor DarkGray
             }
         }
     }

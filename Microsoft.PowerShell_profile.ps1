@@ -155,7 +155,7 @@ function Test-PSRoutesUpdate {
     if (Test-Path $cacheFile) {
         try {
             $c = Get-Content $cacheFile -Raw | ConvertFrom-Json
-            if (($now - [long]$c.Checked) -lt 0) { $latest = $c.Latest }
+            if (($now - [long]$c.Checked) -lt 43200) { $latest = $c.Latest }
         } catch { }
     }
     if (-not $latest) {
@@ -420,6 +420,14 @@ function Invoke-LocalRoute {
         Write-Host (Tr 'Navigated' $path) -ForegroundColor Green
     } elseif ([IO.Path]::GetExtension($path) -eq ".ps1") {
         & $path
+    } elseif ([IO.Path]::GetExtension($path) -eq ".pyw") {
+        $pyw = if (Get-Command pyw -ErrorAction SilentlyContinue) { "pyw" } elseif (Get-Command pythonw -ErrorAction SilentlyContinue) { "pythonw" } else { $null }
+        if ($pyw) {
+            Write-Host (Tr 'Opening' $aliasName) -ForegroundColor Cyan
+            Start-Process -FilePath $pyw -ArgumentList "`"$path`"" -WorkingDirectory (Split-Path $path -Parent)
+        } else {
+            Write-Host "ERROR: pyw / pythonw tak jumpa. Install Python (tick Add to PATH)." -ForegroundColor Red
+        }
     } elseif ([IO.Path]::GetExtension($path) -eq ".py") {
         Write-Host "File: $(Split-Path $path -Leaf)" -ForegroundColor Cyan
         Write-Host "  [R] Run dengan Python (Enter)" -ForegroundColor Green
@@ -733,7 +741,8 @@ function newpath {
     }
 
     if ($path -notmatch '^\\\\') {
-        $aliasName = Read-Host (Tr 'AliasLocalPrompt')
+        $aliasName = (Read-Host (Tr 'AliasLocalPrompt')).Trim()
+        if ($aliasName -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$') { Write-Host "ERROR: Nama tak valid. Guna huruf, nombor, - atau _ je (tak boleh ada space)." -ForegroundColor Red; return }
         $routes = @{}
         if (Test-Path $global:routesFile) {
             $existing = Get-Content $global:routesFile -Raw | ConvertFrom-Json
@@ -755,7 +764,8 @@ function newpath {
         return
     }
 
-    $aliasName = Read-Host (Tr 'AliasRoutePrompt')
+    $aliasName = (Read-Host (Tr 'AliasRoutePrompt')).Trim()
+    if ($aliasName -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$') { Write-Host "ERROR: Nama tak valid. Guna huruf, nombor, - atau _ je (tak boleh ada space)." -ForegroundColor Red; return }
 
     $routes = @{}
     $usedLetters = @()
